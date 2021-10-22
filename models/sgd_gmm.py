@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.utils.data as data_utils
 import matplotlib.pyplot as plt
 import numpy as np
-from util import minibatch_k_means
+from models.cluster import minibatch_k_means
 
 mvn = dist.multivariate_normal.MultivariateNormal
 
@@ -102,7 +102,7 @@ class BaseSGDGMM(ABC):
         self.k_means_factor = k_means_factor
         self.k_means_iters = k_means_iters
         self.max_no_improvement = max_no_improvement
-        # model to encode the data
+        # bacobone model to encode the data
         self.model = model
 
         if not device:
@@ -296,9 +296,7 @@ class BaseSGDGMM(ABC):
 class SGDGMM(BaseSGDGMM):
     """Concrete implementation of class to fit a standard GMM with SGD."""
 
-    def __init__(self, components, dimensions, epochs=100, lr=1e-3,
-                 batch_size=64, tol=1e-6, w=1e-3, device=None, model=None):
+    def __init__(self, components, dimensions, epochs=100, lr=1e-3, batch_size=64, tol=1e-6, w=1e-3, device=None, model=None):
         self.module = SGDGMMModule(components, dimensions, w, device)
-        super().__init__(
-            components, dimensions, epochs=epochs, lr=lr,
-            batch_size=batch_size, w=w, tol=tol, device=device, model=model)
+        super().__init__(components, dimensions, epochs=epochs, lr=lr,
+                         batch_size=batch_size, w=w, tol=tol, device=device, model=model)

@@ -8,7 +8,6 @@ from torch.cuda.amp import GradScaler, autocast
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 from utils import save_config_file, accuracy, save_checkpoint
-from pycave.bayes.gmm import GMM
 
 torch.manual_seed(0)
 

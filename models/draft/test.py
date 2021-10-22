@@ -21,3 +21,4 @@ print(data)
 print(dis_tmp.log_prob(data))
 print(data1)
 print(dis_tmp.log_prob(data1[:, None, :]))
+

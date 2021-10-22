@@ -2,7 +2,6 @@ import numpy as np
 import torch
 
 import matplotlib.pyplot as plt
-import seaborn as sns
 
 from plotting import plot_covariance
 from sgd_gmm import SGDGMM

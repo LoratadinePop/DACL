@@ -45,21 +45,4 @@ class GaussianBlur(object):
 
         img = self.tensor_to_pil(img)
 
-        return img,
-                                                              transform=ContrastiveLearningViewGenerator(
-                                                                  self.get_simclr_pipeline_transform(32),
-                                                                  n_views),
-                                                              download=True),
-
-                          'stl10': lambda: datasets.STL10(self.root_folder, split='unlabeled',
-                                                          transform=ContrastiveLearningViewGenerator(
-                                                              self.get_simclr_pipeline_transform(96),
-                                                              n_views),
-                                                          download=True)}
-
-        try:
-            dataset_fn = valid_datasets[name]
-        except KeyError:
-            raise InvalidDatasetSelection()
-        else:
-            return dataset_fn()
+        return img
