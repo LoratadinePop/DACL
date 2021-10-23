@@ -1,4 +1,6 @@
 import os, sys
+import time
+
 sys.path.append(os.getcwd())
 
 import torch
@@ -11,7 +13,7 @@ from torchvision.datasets import MNIST
 
 from torch.utils.data import DataLoader
 
-from models.sgd_gmm import SGDGMM
+from model.sgd_gmm import SGDGMM
 
 MNIST_transform = transforms.Compose([
     transforms.Resize((224, 224)),
@@ -20,15 +22,15 @@ MNIST_transform = transforms.Compose([
     transforms.Normalize((0.1307, 0.1307, 0.1307), (0.3081, 0.3081, 0.3081)),
 ])
 
-model = resnet18(pretrained=False, progress=True)
-in_features = model.fc.in_features
-model.fc = nn.Linear(in_features, 2)
+resnet_18 = resnet18(pretrained=False, progress=True)
+in_features = resnet_18.fc.in_features
+resnet_18.fc = nn.Linear(in_features, 2)
 
 torch.cuda.set_device(5)
 torch.cuda.empty_cache()
 device = torch.device("cuda")
 
-train_set = MNIST(root="datasets",
+train_set = MNIST(root="dataset",
                   train=False,
                   transform=MNIST_transform,
                   download=True)
@@ -43,8 +45,17 @@ gmm = SGDGMM(10,
              lr=0.01,
              batch_size=512,
              epochs=1,
-             model=model,
+             backbone_model=resnet_18,
              device=device,
              restarts=1,
              k_means_iter=1)
 gmm.fit(train_set)
+
+resnet_18.to(device)
+for batch_data, _ in loader:
+    batch_data = batch_data.to(device)
+    start = time.time()
+    batch_data = resnet_18(batch_data)
+    samples = gmm.sample(batch_data)
+    print(samples.shape)
+    print("Duration: {}".format(time.time() - start))
