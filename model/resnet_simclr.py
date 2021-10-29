@@ -15,7 +15,12 @@ class ResNetSimCLR(nn.Module):
         self.backbone = self._get_basemodel(base_model)
         dim_mlp = self.backbone.fc.in_features
 
-        # add mlp projection head
+        '''
+        resnet18
+        (fc): Linear(in_features=512, out_features=num_classes(default=1000), bias=True)
+        '''
+
+        # add mlp projection head 
         self.backbone.fc = nn.Sequential(nn.Linear(dim_mlp, dim_mlp),
                                          nn.ReLU(), self.backbone.fc)
 

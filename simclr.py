@@ -2,23 +2,29 @@ import logging
 import os
 import sys
 
+import time
+from matplotlib.pyplot import get
 import torch
 import torch.nn.functional as F
 from torch.cuda.amp import GradScaler, autocast
 from torch.utils.tensorboard import SummaryWriter
+from torch.utils.tensorboard.summary import image
 from tqdm import tqdm
-from util import save_config_file, accuracy, save_checkpoint
+from util import save_config_file, accuracy, save_checkpoint, get_time
+from model.sgd_gmm import SGDGMM
 
 torch.manual_seed(0)
 
 
 class SimCLR(object):
     def __init__(self, *args, **kwargs):
+        # *args tuple, positional argument
+        # **kwargs dict, 
         self.args = kwargs['args']
         self.model = kwargs['model'].to(self.args.device)
         self.optimizer = kwargs['optimizer']
         self.scheduler = kwargs['scheduler']
-        self.writer = SummaryWriter()
+        self.writer = SummaryWriter(log_dir="./log")
         logging.basicConfig(filename=os.path.join(self.writer.log_dir,
                                                   'training.log'),
                             level=logging.DEBUG)
@@ -79,14 +85,14 @@ class SimCLR(object):
         # （512，511）
         logits = torch.cat([positives, negatives], dim=1)
         # 512维度的0 tensor([0,0,0,0,...,0]) 这个0就是在计算crossrentropy的时候positive logit的index 下公式中的class
-        # loss(x,class)=−log(exp(x[class])/∑jexp(x[j]))=−x[class]+log(∑jexp(x[j]))
+        # loss(x,class)=−log(exp(x[class])/∑jexp(x[j]))=−x[class]+log(∑jexp(x[j])) 
         labels = torch.zeros(logits.shape[0],
                              dtype=torch.long).to(self.args.device)
 
         logits = logits / self.args.temperature
         return logits, labels
 
-    def train(self, train_loader):
+    def train(self, train_loader, gmm_dataset):
 
         scaler = GradScaler(enabled=self.args.fp16_precision)
 
@@ -94,25 +100,37 @@ class SimCLR(object):
         save_config_file(self.writer.log_dir, self.args)
 
         n_iter = 0
-        logging.info(f"Start SimCLR training for {self.args.epochs} epochs.")
-        logging.info(f"Training with gpu: {self.args.disable_cuda}.")
+        logging.info(f"Start SimCLR training for {self.args.epochs} epochs. <{get_time()}>")
+        logging.info(f"Training with gpu: {not self.args.disable_cuda}. <{get_time()}>")
 
         for epoch_counter in range(self.args.epochs):
             # # 每一个epoch初始化一个GMM
-            # print("GMM initialization")
-            # gmm = GMM(num_components=16, num_features=32, covariance='diag')
-            # # 传入一个batch的数据好像可以
-            # history = gmm.fit(train_loader)
-            # print("GMM Done")
+            gmm = SGDGMM(components=10, dimensions=128, epochs=1, lr=0.001, batch_size=512, 
+            backbone_model=self.model, device=self.args.device)
+            gmm.fit(gmm_dataset)
+
             for images, _ in tqdm(train_loader):
                 # images [0], images[1]是两次augmentation的结果
-                print(images)
+                # print(images)
                 # 在此做mixup
+                # tmp_img = images
                 images = torch.cat(images, dim=0)
                 images = images.to(self.args.device)
 
                 with autocast(enabled=self.args.fp16_precision):
+                    
+                    # 256, 128
                     features = self.model(images)
+
+                    # 256,1,128
+                    sampled_features = gmm.sample(features).to(self.args.device)
+                    sampled_features = torch.squeeze(sampled_features, 1)
+
+                    mixup_coefficient = 0.9
+                    mixup_agumentation = mixup_coefficient * features + (1-mixup_coefficient) * sampled_features
+
+                    features = torch.cat((features, mixup_agumentation),dim=0)
+
                     logits, labels = self.info_nce_loss(features)
                     loss = self.criterion(logits, labels)
 
@@ -142,10 +160,10 @@ class SimCLR(object):
             if epoch_counter >= 10:
                 self.scheduler.step()
             logging.debug(
-                f"Epoch: {epoch_counter}\tLoss: {loss}\tTop1 accuracy: {top1[0]}"
+                f"Epoch: {epoch_counter}\tLoss: {loss}\tTop1 accuracy: {top1[0]}. <{get_time()}>"
             )
 
-        logging.info("Training has finished.")
+        logging.info("Training has finished. <{}>".format(get_time()))
         # save model checkpoints
         checkpoint_name = 'checkpoint_{:04d}.pth.tar'.format(self.args.epochs)
         save_checkpoint(
@@ -158,5 +176,5 @@ class SimCLR(object):
             is_best=False,
             filename=os.path.join(self.writer.log_dir, checkpoint_name))
         logging.info(
-            f"Model checkpoint and metadata has been saved at {self.writer.log_dir}."
+            f"Model checkpoint and metadata has been saved at {self.writer.log_dir}. <{get_time()}>"
         )

@@ -230,7 +230,7 @@ class BaseSGDGMM(ABC):
                 batch_id = 0
                 for data, _ in loader:
                     data = data.to(self.device)
-                    print("Batch {}".format(batch_id))
+                    # print("Batch {}".format(batch_id))
                     batch_id = batch_id + 1
                     if self.backbone_model:
                         with torch.no_grad():

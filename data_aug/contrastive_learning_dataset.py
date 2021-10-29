@@ -30,21 +30,45 @@ class ContrastiveLearningDataset:
         data_transforms = transforms.Compose([transforms.ToTensor()])
         return data_transforms
 
+
+
+    def get_gmm_init_dataset(self, name):
+        valid_datasets = {
+            'cifar10':
+            lambda: datasets.CIFAR10(
+                self.root_folder,
+                train=True,
+                transform=self.get_simclr_pipeline_without_transform(),
+                download=True),
+            'stl10':
+            lambda: datasets.STL10(self.root_folder,
+                                   split='unlabeled',
+                                   transform=self.get_simclr_pipeline_without_transform(),
+                                   download=True)
+        }
+
+        try:
+            dataset_fn = valid_datasets[name]
+        except KeyError:
+            raise InvalidDatasetSelection()
+        else:
+            return dataset_fn()
+
+    '''
+    cifar10 dataset: (3,32,32)
+    '''
     def get_dataset(self, name, n_views):
         valid_datasets = {
             'cifar10':
             lambda: datasets.CIFAR10(
                 self.root_folder,
                 train=True,
-                transform=ContrastiveLearningViewGenerator(
-                    self.get_simclr_pipeline_transform(32), n_views),
+                transform=ContrastiveLearningViewGenerator(self.get_simclr_pipeline_transform(32), n_views),
                 download=True),
             'stl10':
             lambda: datasets.STL10(self.root_folder,
                                    split='unlabeled',
-                                   transform=ContrastiveLearningViewGenerator(
-                                       self.get_simclr_pipeline_transform(96),
-                                       n_views),
+                                   transform=ContrastiveLearningViewGenerator(self.get_simclr_pipeline_transform(96), n_views),
                                    download=True)
         }
 

@@ -3,6 +3,10 @@ import shutil
 
 import torch
 import yaml
+import time
+
+def get_time():
+    return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
 
 
 def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):

@@ -1,6 +1,7 @@
 import argparse
 import torch
 import torch.backends.cudnn as cudnn
+from torch.utils import data
 from torchvision import models
 from data_aug.contrastive_learning_dataset import ContrastiveLearningDataset
 from model.resnet_simclr import ResNetSimCLR
@@ -22,7 +23,7 @@ parser.add_argument('-dataset-name',
 parser.add_argument('-a',
                     '--arch',
                     metavar='ARCH',
-                    default='resnet18',
+                    default='resnet50',
                     choices=model_names,
                     help='model architecture: ' + ' | '.join(model_names) +
                     ' (default: resnet50)')
@@ -86,7 +87,7 @@ parser.add_argument('--n-views',
                     type=int,
                     metavar='N',
                     help='Number of views for contrastive learning training.')
-parser.add_argument('--gpu-index', default=5, type=int, help='Gpu index.')
+parser.add_argument('--gpu-index', default=3, type=int, help='Gpu index.')
 
 
 def main():
@@ -101,12 +102,16 @@ def main():
         args.device = torch.device('cpu')
         args.gpu_index = -1
 
-    dataset = ContrastiveLearningDataset(args.data)
+    
+    dataset = ContrastiveLearningDataset(root_folder=args.data)
 
     # n_views = 1 就是mixup情况
     #  train_dataset = datasets.get_dataset(args.dataset_name, args.n_views)
-    train_dataset = dataset.get_dataset(args.dataset_name, 2)
-    print(train_dataset)
+    train_dataset = dataset.get_dataset(args.dataset_name, 1)
+    # print(train_dataset)
+
+    gmm_init_dataset = dataset.get_gmm_init_dataset(args.dataset_name)
+
     train_loader = torch.utils.data.DataLoader(train_dataset,
                                                batch_size=args.batch_size,
                                                shuffle=True,
@@ -125,11 +130,11 @@ def main():
 
     #  It’s a no-op if the 'gpu_index' argument is a negative integer or None.
     with torch.cuda.device(args.gpu_index):
-        simclr = SimCLR(model=model,
+        simclr = SimCLR(args=args,
+                        model=model,
                         optimizer=optimizer,
-                        scheduler=scheduler,
-                        args=args)
-        simclr.train(train_loader)
+                        scheduler=scheduler)
+        simclr.train(train_loader, gmm_init_dataset)
 
 
 if __name__ == "__main__":
