@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch.utils.data as data_utils
 import matplotlib.pyplot as plt
 import numpy as np
+from tqdm import tqdm
 import time
 from model.cluster import minibatch_k_means
 
@@ -188,7 +189,7 @@ class BaseSGDGMM(ABC):
         init_loader = data_utils.DataLoader(
             data,
             batch_size=self.batch_size * self.k_means_factor,
-            num_workers=0,
+            num_workers=32,
             shuffle=True,
             pin_memory=False,
             drop_last=True,
@@ -197,7 +198,7 @@ class BaseSGDGMM(ABC):
         loader = data_utils.DataLoader(
             data,
             batch_size=self.batch_size,
-            num_workers=0,
+            num_workers=32,
             shuffle=True,
             pin_memory=False,
             drop_last=True,
@@ -228,7 +229,7 @@ class BaseSGDGMM(ABC):
                 # d = [datas, labels]
                 # d = [a.to(self.device) for a in d]
                 batch_id = 0
-                for data, _ in loader:
+                for data, _ in tqdm(loader):
                     data = data.to(self.device)
                     # print("Batch {}".format(batch_id))
                     batch_id = batch_id + 1
@@ -298,14 +299,14 @@ class BaseSGDGMM(ABC):
         self.train_loss_curve = best_train_loss_curve
 
         # Plot training curve
-        print('plot')
+        # print('plot')
         x_index = np.arange(1, len(self.train_loss_curve) + 1, 1)
         fig, ax = plt.subplots()
         ax.plot(x_index, self.train_loss_curve)
         ax.set(xlabel='epoch', ylabel='train_loss', title='Train loss curve')
         ax.grid()
         plt.show()
-        plt.savefig("./result/training/train_loss_curve_{}".format(
+        plt.savefig("./result/training/GMM_train_loss_curve_{}".format(
             time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())))
         #################
 

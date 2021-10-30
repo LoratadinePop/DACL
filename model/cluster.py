@@ -1,5 +1,5 @@
 import torch
-
+from tqdm import tqdm
 
 def minibatch_k_means(loader,
                       k,
@@ -26,8 +26,8 @@ def minibatch_k_means(loader,
     print('Stating minibatch_k_means')
     for j in range(max_iters):
         if j % 1 == 0:
-            print('Iter: {}'.format(j))
-        for X, _ in loader:
+            print('Mini batch K-Means Epoch: {}'.format(j))
+        for X, _ in tqdm(loader):
             # X = X.to(device) there is a change here
             X = X.to(device)
             if backbone_model:

@@ -105,8 +105,8 @@ class SimCLR(object):
 
         for epoch_counter in range(self.args.epochs):
             # # 每一个epoch初始化一个GMM
-            gmm = SGDGMM(components=10, dimensions=128, epochs=1, lr=0.001, batch_size=512, 
-            backbone_model=self.model, device=self.args.device)
+            gmm = SGDGMM(components=50, dimensions=128, epochs=200, lr=0.01, batch_size=512, 
+            backbone_model=self.model, device=self.args.device, restarts=10,k_means_iter=200)
             gmm.fit(gmm_dataset)
 
             for images, _ in tqdm(train_loader):

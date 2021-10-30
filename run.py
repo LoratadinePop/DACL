@@ -29,18 +29,18 @@ parser.add_argument('-a',
                     ' (default: resnet50)')
 parser.add_argument('-j',
                     '--workers',
-                    default=0,
+                    default=32,
                     type=int,
                     metavar='N',
                     help='number of data loading workers (default: 32)')
 parser.add_argument('--epochs',
-                    default=200,
+                    default=100,
                     type=int,
                     metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('-b',
                     '--batch-size',
-                    default=256,
+                    default=512,
                     type=int,
                     metavar='N',
                     help='mini-batch size (default: 256), this is the total '
@@ -61,7 +61,7 @@ parser.add_argument('--wd',
                     help='weight decay (default: 1e-4)',
                     dest='weight_decay')
 parser.add_argument('--seed',
-                    default=None,
+                    default=12345,
                     type=int,
                     help='seed for initializing training. ')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
@@ -75,7 +75,7 @@ parser.add_argument('--out_dim',
                     type=int,
                     help='feature dimension (default: 128)')
 parser.add_argument('--log-every-n-steps',
-                    default=100,
+                    default=1,
                     type=int,
                     help='Log every n steps')
 parser.add_argument('--temperature',
@@ -87,7 +87,7 @@ parser.add_argument('--n-views',
                     type=int,
                     metavar='N',
                     help='Number of views for contrastive learning training.')
-parser.add_argument('--gpu-index', default=3, type=int, help='Gpu index.')
+parser.add_argument('--gpu-index', default=5, type=int, help='Gpu index.')
 
 
 def main():
