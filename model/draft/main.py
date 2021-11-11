@@ -1,4 +1,5 @@
 import argparse
+from threading import local
 from tqdm import tqdm
 import torch
 import torchvision
@@ -50,6 +51,9 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--local_rank", default=-1, type=int)
 FLAGS = parser.parse_args()
 local_rank = FLAGS.local_rank
+
+print("local rank:")
+print(local_rank)
 
 # DDP：DDP backend初始化
 torch.cuda.set_device(local_rank)

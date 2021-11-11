@@ -1,6 +1,15 @@
 import torch
 from tqdm import tqdm
 
+'''
+Note: This program is running in a single process, do not support multiple GPU training.
+
+loader: Dataloader for mini-batch k-means
+k: Numbers of cluster center
+tol: Threshold of k-means converged
+device: Device to process
+backbone_model: Embedding encoder of data
+'''
 def minibatch_k_means(loader,
                       k,
                       max_iters=50,
@@ -9,24 +18,23 @@ def minibatch_k_means(loader,
                       backbone_model=None):
     """
     Do minibatch version of k-means
-
     Based on https://www.eecs.tufts.edu/~dsculley/papers/fastkmeans.pdf
     """
     tmp_centroids = next(iter(loader))[0][:k]
     tmp_centroids = tmp_centroids.to(device)
+    # print(tmp_centroids.device)
     if backbone_model:
         with torch.no_grad():
             tmp_centroids = backbone_model(tmp_centroids)
     # centroids = next(iter(loader))[0][:k].to(device)
     centroids = tmp_centroids.to(device)
-
     counts = torch.ones(k, device=device)
     prev_norm = torch.tensor(0.0, device=device)
+    print('Starting Mini-Batch K-Means Initialization')
 
-    print('Stating minibatch_k_means')
-    for j in range(max_iters):
-        if j % 1 == 0:
-            print('Mini batch K-Means Epoch: {}'.format(j))
+    for j in tqdm(range(max_iters)):
+        # if j % 1 == 0:
+        #     print('Mini batch K-Means Epoch: {}'.format(j))
         for X, _ in tqdm(loader):
             # X = X.to(device) there is a change here
             X = X.to(device)
@@ -47,13 +55,12 @@ def minibatch_k_means(loader,
         norm = torch.norm(centroids, dim=0).sum()
 
         if torch.abs(norm - prev_norm) < tol:
-            print('Converged')
+            print('Mini-Batch K-Means is Converged.')
             return counts, centroids
         prev_norm = norm
 
-    print('Finished minibatch_k_means')
+    print('Finished Mini-Batch K-Means Initialization.')
     return counts, centroids
-
 
 def k_means(X, k, max_iters=50, tol=1e-9, device=None):
     """Do standard k-means clustering."""

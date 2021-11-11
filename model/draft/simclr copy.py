@@ -1,4 +1,3 @@
-from functools import wraps
 import logging
 import os
 import sys
@@ -12,43 +11,24 @@ from torch.utils.tensorboard import SummaryWriter
 from torch.utils.tensorboard.summary import image
 from tqdm import tqdm
 from util import save_config_file, accuracy, save_checkpoint, get_time
-from model.sgd_gmm import SGDGMM, SGDGMMModule
+from model.sgd_gmm import SGDGMM
 
 import torch.distributed as dist
-import torch.multiprocessing as mp
 
 
-# BUG: RuntimeError: Default process group has not been initialized,
-# please make sure to call init_process_group.
+torch.manual_seed(0)
 
-
-
-def fit_gmm(local_rank, args, model, dataset):
-
-    torch.cuda.set_device(local_rank)
-    device = torch.device("cuda", local_rank)
-    gmm = SGDGMM(components=args.components,
-                dimensions=args.out_dim,
-                lr=0.01,
-                batch_size=args.batch_size,
-                epochs=args.gmm_epoch,
-                backbone_model=model,
-                device=device,
-                restarts=args.restarts,
-                k_means_iter=args.k_means_iter,
-                args=args)
-    gmm.fit(local_rank, dataset)
 
 class SimCLR(object):
     def __init__(self, *args, **kwargs):
         # *args tuple, positional argument
-        # **kwargs dict,
+        # **kwargs dict, 
         self.args = kwargs['args']
-        # self.model = kwargs['model'].to(self.args.device)
-        self.model = kwargs['model']
+        self.args.device = self.args.local_rank
+        self.model = kwargs['model'].to(self.args.device)
         self.optimizer = kwargs['optimizer']
         self.scheduler = kwargs['scheduler']
-        self.writer = SummaryWriter(log_dir="./log/simclr")
+        self.writer = SummaryWriter(log_dir="./log")
         logging.basicConfig(filename=os.path.join(self.writer.log_dir,
                                                   'training.log'),
                             level=logging.DEBUG)
@@ -109,7 +89,7 @@ class SimCLR(object):
         # （512，511）
         logits = torch.cat([positives, negatives], dim=1)
         # 512维度的0 tensor([0,0,0,0,...,0]) 这个0就是在计算crossrentropy的时候positive logit的index 下公式中的class
-        # loss(x,class)=−log(exp(x[class])/∑jexp(x[j]))=−x[class]+log(∑jexp(x[j]))
+        # loss(x,class)=−log(exp(x[class])/∑jexp(x[j]))=−x[class]+log(∑jexp(x[j])) 
         labels = torch.zeros(logits.shape[0],
                              dtype=torch.long).to(self.args.device)
 
@@ -117,52 +97,24 @@ class SimCLR(object):
         return logits, labels
 
     def train(self, train_loader, gmm_dataset):
+
         scaler = GradScaler(enabled=self.args.fp16_precision)
 
         # save config file
         save_config_file(self.writer.log_dir, self.args)
 
         n_iter = 0
-        logging.info(
-            f"Start SimCLR training for {self.args.epochs} epochs. <{get_time()}>"
-        )
-        logging.info(
-            f"Training with gpu: {not self.args.disable_cuda}. <{get_time()}>")
+        logging.info(f"Start SimCLR training for {self.args.epochs} epochs. <{get_time()}>")
+        logging.info(f"Training with gpu: {not self.args.disable_cuda}. <{get_time()}>")
 
-        for epoch_counter in tqdm(range(self.args.epochs)):
+        for epoch_counter in range(self.args.epochs):
 
             train_loader.sampler.set_epoch(epoch_counter)
-            # # # 每一个epoch初始化一个GMM
-            # gmm = SGDGMM(components=50, dimensions=128, epochs=200, lr=0.01, batch_size=512,
-            # backbone_model=self.model, device=self.args.device, restarts=10,k_means_iter=200)
-            # gmm.fit(gmm_dataset)
-            # TAG: GMM initialize
 
-            gmm = SGDGMMModule(self.args.components, self.args.out_dim,
-                               self.args.weight_decay)
-            
-
-            if epoch_counter % 10 == 0:
-                if dist.get_rank() == 0:
-                    time1 = time.time()
-                    print(f"reinitialzing GMM every epoch... @rank{dist.get_rank()}")
-                    os.environ['MASTER_ADDR'] = 'localhost'
-                    os.environ['MASTER_PORT'] = '34351'
-                    t = [gmm_dataset, self.args, self.model]
-                    mp.spawn(fit_gmm, nprocs=self.args.gpus, args=(self.args, self.model.module, gmm_dataset))
-                    time2 = time.time()
-                    print(f"Finish GMM initializing, lasting {time2 - time1} seconds! @rank{dist.get_rank()}")
-                    dist.barrier()
-                else:
-                    # print(f"rank {dist.get_rank()} is waiting")
-                    dist.barrier()
-                                    
-            gmm.load_state_dict(
-                torch.load("./result/checkpoint/sgdgmm/gmm.ckpt"))
-
-            # TAG: put gmm on CPU
-            # gmm.to(self.args.device)
-            print(f"epoch {epoch_counter} started... @rank{dist.get_rank()}")
+            # # 每一个epoch初始化一个GMM
+            gmm = SGDGMM(components=50, dimensions=128, epochs=200, lr=0.01, batch_size=512, 
+            backbone_model=self.model, device=self.args.device, restarts=10,k_means_iter=200)
+            gmm.fit(gmm_dataset)
 
             for images, _ in tqdm(train_loader):
                 # images [0], images[1]是两次augmentation的结果
@@ -173,21 +125,19 @@ class SimCLR(object):
                 images = images.to(self.args.device)
 
                 with autocast(enabled=self.args.fp16_precision):
-
+                    
                     # 256, 128
                     features = self.model(images)
 
-                    # TAG:256,1,128
-                    sampled_features = gmm.sample(features.to(torch.device("cpu")))
-                    sampled_features = sampled_features.to(self.args.device)
+                    # 256,1,128
+                    sampled_features = gmm.sample(features).to(self.args.device)
                     sampled_features = torch.squeeze(sampled_features, 1)
 
                     mixup_coefficient = 0.9
-                    mixup_agumentation = mixup_coefficient * features + (
-                        1 - mixup_coefficient) * sampled_features
+                    mixup_agumentation = mixup_coefficient * features + (1-mixup_coefficient) * sampled_features
 
-                    features = torch.cat((features, mixup_agumentation), dim=0)
-                    #
+                    features = torch.cat((features, mixup_agumentation),dim=0)
+
                     logits, labels = self.info_nce_loss(features)
                     loss = self.criterion(logits, labels)
 
@@ -212,6 +162,7 @@ class SimCLR(object):
                                            global_step=n_iter)
 
                 n_iter += 1
+
             # warmup for the first 10 epochs
             if epoch_counter >= 10:
                 self.scheduler.step()

@@ -46,7 +46,6 @@ class ContrastiveLearningDataset:
                                    transform=self.get_simclr_pipeline_without_transform(),
                                    download=True)
         }
-
         try:
             dataset_fn = valid_datasets[name]
         except KeyError:
@@ -63,12 +62,12 @@ class ContrastiveLearningDataset:
             lambda: datasets.CIFAR10(
                 self.root_folder,
                 train=True,
-                transform=ContrastiveLearningViewGenerator(self.get_simclr_pipeline_transform(32), n_views),
+                transform=ContrastiveLearningViewGenerator(self.get_simclr_pipeline_without_transform(), n_views),
                 download=True),
             'stl10':
             lambda: datasets.STL10(self.root_folder,
                                    split='unlabeled',
-                                   transform=ContrastiveLearningViewGenerator(self.get_simclr_pipeline_transform(96), n_views),
+                                   transform=ContrastiveLearningViewGenerator(self.get_simclr_pipeline_without_transform(), n_views),
                                    download=True)
         }
 
