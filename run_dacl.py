@@ -6,7 +6,7 @@ from torch.utils import data
 from torchvision import models
 from data_aug.contrastive_learning_dataset import ContrastiveLearningDataset
 from model.resnet_simclr import ResNetSimCLR
-from simclr_dacl import SimCLR_DACL
+from simclr import SimCLR
 
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -44,6 +44,8 @@ def main(local_rank, args):
 
     dataset = ContrastiveLearningDataset(root_folder=args.data)
 
+    gmm_init_dataset = dataset.get_gmm_init_dataset(args.dataset_name)
+
     # TAG: n_views = 1 就是mixup情况
     #  train_dataset = datasets.get_dataset(args.dataset_name, args.n_views)
     train_dataset = dataset.get_dataset(args.dataset_name, 1)
@@ -70,11 +72,19 @@ def main(local_rank, args):
         optimizer, T_max=len(train_loader), eta_min=0, last_epoch=-1
     )
 
+    #  It’s a no-op if the 'gpu_index' argument is a negative integer or None.
+    # with torch.cuda.device(args.gpu_index):
+    #     simclr = SimCLR(args=args,
+    #                     model=model,
+    #                     optimizer=optimizer,
+    #                     scheduler=scheduler)
+    #     simclr.train(train_loader, gmm_init_dataset)
+    # print(dist.get_rank())
     model.train()
-    simclr = SimCLR_DACL(args=args, model=model,
+    simclr = SimCLR(args=args, model=model,
                     optimizer=optimizer, scheduler=scheduler)
 
-    simclr.train(train_loader)
+    simclr.train(train_loader, gmm_init_dataset)
 
 
 def init():
@@ -110,7 +120,7 @@ def init():
     parser.add_argument(
         '-j',
         '--workers',
-        default=4,
+        default=0,
         type=int,
         metavar='N',
         help='number of data loading workers (default: 32)',
@@ -190,32 +200,9 @@ def init():
     # parser.add_argument("--local_rank", default=-1, type=int)
     ###########################
 
-    ### DDP arguments #########
-    parser.add_argument('-n', '--nodes', default=1, type=int, metavar='N')
-    parser.add_argument(
-        '-g', '--gpus', default=4, type=int, help='number of gpus per node'
-    )
-    parser.add_argument(
-        '-nr', '--nr', default=0, type=int, help='ranking within the nodes'
-    )
-    ###########################
-
-    args = parser.parse_args()
-    # configuration for main init multiprocessing
-    args.world_size = args.gpus * args.nodes
-    os.environ['CUDA_VISIBLE_DEVICES'] = '1,2,3,7'
-    os.environ['MASTER_ADDR'] = 'localhost'
-    os.environ['MASTER_PORT'] = '23357'
-    # 调用main函数，传入参数(rank,args)
-    mp.spawn(main, nprocs=args.gpus, args=(args,))
-
-
-if __name__ == "__main__":
-    init()
 
 
 
-'''
     ###### GMM arguments ######
     parser.add_argument(
         '-comps',
@@ -227,7 +214,7 @@ if __name__ == "__main__":
     parser.add_argument(
         '-gmm_e',
         '--gmm_epoch',
-        default=100,
+        default=3,
         type=int,
         help='number of total epochs to fit a GMM',
     )
@@ -258,7 +245,7 @@ if __name__ == "__main__":
     parser.add_argument(
         '-kmi',
         '--k_means_iters',
-        default=10,
+        default=3,
         type=int,
         help='Iterations of k-means initialization of gmm\'s parameters',
     )
@@ -285,5 +272,25 @@ if __name__ == "__main__":
     )
     ##########################
 
+    ### DDP arguments #########
+    parser.add_argument('-n', '--nodes', default=1, type=int, metavar='N')
+    parser.add_argument(
+        '-g', '--gpus', default=1, type=int, help='number of gpus per node'
+    )
+    parser.add_argument(
+        '-nr', '--nr', default=0, type=int, help='ranking within the nodes'
+    )
+    ###########################
 
-'''
+    args = parser.parse_args()
+    # configuration for main init multiprocessing
+    args.world_size = args.gpus * args.nodes
+    os.environ['CUDA_VISIBLE_DEVICES'] = '6,7'
+    os.environ['MASTER_ADDR'] = 'localhost'
+    os.environ['MASTER_PORT'] = '23357'
+    # 调用main函数，传入参数(rank,args)
+    mp.spawn(main, nprocs=args.gpus, args=(args,))
+
+
+if __name__ == "__main__":
+    init()
