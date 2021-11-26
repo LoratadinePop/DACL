@@ -96,8 +96,8 @@ class SimCLR_DACL(object):
                         aug_features2 = torch.stack(mixup_list2)
                         
                         alpha = 0.9
-                        mixing_coefficient1 = torch.distributions.uniform.Uniform(alpha, 1)
-                        mixing_coefficient2 = torch.distributions.uniform.Uniform(alpha, 1)
+                        mixing_coefficient1 = torch.distributions.uniform.Uniform(alpha, 1).sample()
+                        mixing_coefficient2 = torch.distributions.uniform.Uniform(alpha, 1).sample()
 
                         mixup_aug1 = features * mixing_coefficient1 + (1 - mixing_coefficient1) * aug_features1
                         mixup_aug2 = features * mixing_coefficient2 + (1 - mixing_coefficient2) * aug_features2

@@ -1,6 +1,5 @@
 /dataset
 __pycache__
 /.vscode
-/runs
 /log/
 /result/checkpoint

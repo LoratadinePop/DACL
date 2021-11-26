@@ -29,7 +29,7 @@ def minibatch_k_means(loader, k, max_iters=50, tol=1e-3, device=None, backbone_m
     # print(tmp_centroids.device)
     if backbone_model:
         with torch.no_grad():
-            tmp_centroids = backbone_model(tmp_centroids)
+            tmp_centroids = torch.flatten(backbone_model(tmp_centroids), start_dim=1) # TAG: Flatten
     # centroids = next(iter(loader))[0][:k].to(device)
     centroids = tmp_centroids.to(device)
     counts = torch.ones(k, device=device)
@@ -47,7 +47,7 @@ def minibatch_k_means(loader, k, max_iters=50, tol=1e-3, device=None, backbone_m
                 if backbone_model:
                     # backbone_model.eval() # FIXME: Is is necessary?
                     with torch.no_grad():
-                        X = backbone_model(X)
+                        X = torch.flatten(backbone_model(X), start_dim=1) # TAG: flatten
                 # b,d b,1,d 1,c,d
                 # print(X.shape)
                 diffs = X[:, None, :] - centroids[None, :, :]

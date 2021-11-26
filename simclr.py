@@ -1,41 +1,41 @@
+import time
 from functools import wraps
 import logging
 import os
-import sys
-import time
 from matplotlib.pyplot import get
-from numpy import uint
+from numpy import imag, uint
 import torch
+from torch._C import device
 import torch.nn.functional as F
 from torch.cuda.amp import GradScaler, autocast
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.tensorboard.summary import image
 from tqdm import tqdm
-from util import reduce_tensor, accuracy, save_checkpoint, get_time, get_writer
+from util import reduce_tensor, save_checkpoint, get_time, get_writer
 from model.sgd_gmm import SGDGMM, SGDGMMModule
 import torch.multiprocessing
-torch.multiprocessing.set_sharing_strategy('file_system')
+# torch.multiprocessing.set_sharing_strategy('file_system')
 import torch.distributed as dist
 import torch.multiprocessing as mp
 
-
-# DONE: RuntimeError: Default process group has not been initialized,
-# please make sure to call init_process_group.
-
-
 def fit_gmm(local_rank, args, model, dataset):
-    torch.cuda.set_device(local_rank)
     device = torch.device("cuda", local_rank)
     gmm = SGDGMM(
         components=args.components,
-        dimensions=args.out_dim,
-        lr=args.gmm_lr,
-        batch_size=args.gmm_batch_size,
+        dimensions=args.gmm_dim,
         epochs=args.gmm_epoch,
-        backbone_model=model,
-        device=device,
+        lr=args.gmm_lr,
+        w=args.gmm_w,
+        batch_size=args.gmm_batch_size,
+        tol=1e-6,
         restarts=args.restarts,
+        max_no_improvement=20,
+        k_means_factor=args.k_means_factor,
         k_means_iters=args.k_means_iters,
+        lr_step=args.gmm_lr_step,
+        lr_gamma=args.gmm_lr_gamma,
+        device=device,
+        backbone_model=model,
         args=args,
     )
     gmm.fit(local_rank, dataset)
@@ -75,8 +75,8 @@ class SimCLR(object):
         # 0 0 0 1 0 0 0 1
         labels = (labels.unsqueeze(0) == labels.unsqueeze(1)).float()
         labels = labels.to(self.args.device)
-        features = F.normalize(features, dim=1)
         # (512, 512)
+        features = F.normalize(features, dim=1) # calculate norm
         similarity_matrix = torch.matmul(features, features.T)
         # assert similarity_matrix.shape == (
         #     self.args.n_views * self.args.batch_size, self.args.n_views * self.args.batch_size)
@@ -121,20 +121,25 @@ class SimCLR(object):
             train_loader.sampler.set_epoch(epoch_counter)
 
             # FIXME: Do not put gmm on GPU, it will cause error which some tensor on cpu while others on GPU.
-            gmm = SGDGMMModule(self.args.components, self.args.out_dim, self.args.weight_decay)
+            gmm = SGDGMMModule(self.args.components, self.args.gmm_dim, self.args.weight_decay)
 
             if epoch_counter % self.args.gmm_every_n_epoch == 0:
                 if dist.get_rank() == 0:
                     os.environ['MASTER_ADDR'] = 'localhost'
                     os.environ['MASTER_PORT'] = '34351'
-                    self.model.eval() # TAG: 
+                    os.environ['CUDA_VISIBLE_DEVICES'] = '5,0'
+                    # self.model.eval() # TAG: 
                     mp.spawn(fit_gmm, nprocs=self.args.gpus, args=(self.args, self.model.module, gmm_dataset))
-                    self.model.train() # TAG: 
+                    # self.model.train() # TAG: 
                     dist.barrier()
                 else:
                     dist.barrier()
 
             gmm.load_state_dict(torch.load("./result/checkpoint/sgdgmm/gmm.pth"))
+            # gmm.to(self.args.device) #TAG:
+
+            # backbone = self.model.module.backbone
+            # mlp = self.model.module.mlp
 
             with tqdm(total=(len(train_loader.dataset) // train_loader.batch_size // dist.get_world_size()), ncols=None, unit='it') as _tqdm:
                 _tqdm.set_description(f'SimCLR training @{dist.get_rank()} epoch {epoch_counter+1}/{self.args.epochs}')
@@ -149,21 +154,26 @@ class SimCLR(object):
                     images = images.to(self.args.device)
 
                     with autocast(enabled=self.args.fp16_precision):
+                        # features = self.model(images)
                         # 256, 128
-                        features = self.model(images)
+                        features = torch.flatten(self.model.module.backbone(images), start_dim=1) # TAG: intermediate layer feature
+                        # features = self.model(images) # TAG: modified
                         # TAG:256,1,128
                         # DONE: Augmentation twice!
+                        time1 = time.time()
                         sampled_features = gmm.sample(features.to(torch.device("cpu")), sample_num=2)
+                        time2 = time.time()
+                        print(f'@rank{dist.get_rank()} spend {time2-time1}s to sample features.')
                         sampled_features = sampled_features.to(self.args.device)
                         # sampled_features = torch.squeeze(sampled_features, 1)
-                        mixup_coefficient = 0.9
+                        mixup_coefficient = torch.distributions.uniform.Uniform(0.9, 1.0).sample()
                         mixup_aug1 = mixup_coefficient * features + (1 - mixup_coefficient) * sampled_features[:,0,:]
                         mixup_aug2 = mixup_coefficient * features + (1 - mixup_coefficient) * sampled_features[:,1,:]
-
-                        features = torch.cat((mixup_aug1, mixup_aug2), dim=0)
+                        feat1 = self.model.module.mlp(mixup_aug1)
+                        feat2 = self.model.module.mlp(mixup_aug2)
+                        features = torch.cat((feat1, feat2), dim=0)
                         logits, labels = self.info_nce_loss(features)
                         loss = self.criterion(logits, labels)
-
                     self.optimizer.zero_grad()
                     scaler.scale(loss).backward()
                     scaler.step(self.optimizer)
@@ -193,7 +203,7 @@ class SimCLR(object):
                 if epoch_counter >= 10:
                     self.scheduler.step()
 
-                logging.debug(f"@rank{dist.get_rank()} Epoch: {epoch_counter+1}\t<{get_time()}>")
+                logging.debug(f"@rank{dist.get_rank()} Epoch: {epoch_counter+1}\t<{get_time()}> loss: {loss.item()}")
 
         if dist.get_rank() == 0:
             logging.info("@rank{} Training has finished. <{}>".format(dist.get_rank(), get_time()))

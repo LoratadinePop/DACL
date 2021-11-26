@@ -14,7 +14,7 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from util import save_plot, reduce_tensor, get_writer
 import torch.multiprocessing
-torch.multiprocessing.set_sharing_strategy('file_system')
+# torch.multiprocessing.set_sharing_strategy('file_system')
 mvn = torch.distributions.multivariate_normal.MultivariateNormal
 
 class SGDGMMModule(nn.Module):
@@ -65,9 +65,7 @@ class SGDGMMModule(nn.Module):
     return: a batch of component index which data belongs to (512,)
     '''
     def predict(self, input):
-        log_prob_batch = mvn(loc=self.means, scale_tril=self.L).log_prob(
-            input[:, None, :]
-        )  # 512,10
+        log_prob_batch = mvn(loc=self.means, scale_tril=self.L).log_prob(input[:, None, :])  # 512,10
         component_batch = torch.max(log_prob_batch, 1)[1]
         return component_batch
 
@@ -77,22 +75,44 @@ class SGDGMMModule(nn.Module):
     sample_num: default = 1
     return: [batch_size, sample_num, feature_dim]
     '''
+    # def sample(self, input, sample_num=1):
+    #     # input = input.to(self.device)
+    #     component = self.predict(input)
+    #     multivar_normal = [
+    #         mvn(loc=self.means[idx], scale_tril=self.L[idx]) for idx in range(self.k)
+    #     ]
+    #     sample_list = []
+    #     # FIXME: Wondering if there is a batch sample way to improve performance.
+    #     # TODO: Using torch.stack() to convert a list of Tensors to Tensors
+    #     for idx in range(len(component)):
+    #         sample_list.append(
+    #             [
+    #                 multivar_normal[component[idx]]
+    #                 .rsample()
+    #                 .detach()
+    #                 .cpu()
+    #                 .numpy()
+    #                 .tolist()
+    #                 for t in range(sample_num)
+    #             ]
+    #         )
+    #     return torch.Tensor(sample_list)
+
+    '''
+    Return [ [ [feature1],[feature2] ],[ [],[] ],[ [],[] ]... ]
+    '''
     def sample(self, input, sample_num=1):
         # input = input.to(self.device)
         component = self.predict(input)
-        multivar_normal = [
-            mvn(loc=self.means[idx], scale_tril=self.L[idx]) for idx in range(self.k)
-        ]
+        multivar_normal = [mvn(loc=self.means[idx], scale_tril=self.L[idx]) for idx in range(self.k)]
         sample_list = []
         # FIXME: Wondering if there is a batch sample way to improve performance.
-        # TODO: Using torch.stack() to convert a list of Tensors to Tensors
         for idx in range(len(component)):
             sample_list.append(
                 [
                     multivar_normal[component[idx]]
                     .rsample()
                     .detach()
-                    .cpu()
                     .numpy()
                     .tolist()
                     for t in range(sample_num)
@@ -109,12 +129,12 @@ class SGDGMM(ABC):
         dimensions,
         epochs=100,
         lr=1e-3,
+        w=1e-6,
         batch_size=64,
         tol=1e-6,
         restarts=1,
         max_no_improvement=20,
         k_means_factor=1,
-        w=1e-6,
         k_means_iters=2,
         lr_step=5,
         lr_gamma=0.1,
@@ -138,14 +158,13 @@ class SGDGMM(ABC):
         self.max_no_improvement = max_no_improvement
         self.backbone_model = backbone_model  # backbone model to encode the data
 
-        
-
         if not device:
             self.device = torch.device('cpu')
         else:
             self.device = device
 
-        self.backbone_model = self.backbone_model.to(self.device)
+        # TAG: 这里需要获取backbone encoder
+        self.backbone_model = self.backbone_model.backbone.to(self.device)
 
         # DONE: Move to fit
         # self.module = self.module.to(device)
@@ -223,9 +242,9 @@ class SGDGMM(ABC):
             self.optimiser = torch.optim.Adam(params=self.module.parameters(), lr=self.lr)
             self.scheduler = torch.optim.lr_scheduler.MultiStepLR(
                 self.optimiser,
-                milestones=[self.lr_step, self.lr_step + 5],
+                milestones=[self.lr_step, self.lr_step + 20, self.lr_step + 50],
                 gamma=self.lr_gamma,
-            )
+            ) # TAG: change here!
 
             # DONE: Reduce all process's data
             train_loss_curve = []
@@ -255,6 +274,7 @@ class SGDGMM(ABC):
                             with torch.no_grad():
                                 # FIXME: Change backbone model to eval mode to remove BN & dropout layer etc...
                                 data = self.backbone_model(data)
+                                data = torch.flatten(data, start_dim=1) # TAG: backbone resnet needs to flatten
 
                         self.optimiser.zero_grad()
                         loss = self.module(data)

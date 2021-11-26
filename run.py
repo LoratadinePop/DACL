@@ -12,7 +12,7 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.multiprocessing as mp
 import torch.multiprocessing
-torch.multiprocessing.set_sharing_strategy('file_system')
+# torch.multiprocessing.set_sharing_strategy('file_system')
 
 
 '''
@@ -38,7 +38,6 @@ def main(local_rank, args):
         backend='nccl', init_method='env://', world_size=args.world_size, rank=rank
     )
 
-    torch.cuda.set_device(local_rank)
     device = torch.device("cuda", local_rank)
     args.device = local_rank # TAG: notify
 
@@ -120,7 +119,7 @@ def init():
     parser.add_argument(
         '-j',
         '--workers',
-        default=4,
+        default=0,
         type=int,
         metavar='N',
         help='number of data loading workers (default: 32)',
@@ -154,7 +153,7 @@ def init():
     parser.add_argument(
         '--wd',
         '--weight-decay',
-        default=1e-4,
+        default=1e-6,
         type=float,
         metavar='W',
         help='weight decay (default: 1e-4)',
@@ -207,14 +206,21 @@ def init():
     parser.add_argument(
         '-comps',
         '--components',
-        default=10,
+        default=30,
         type=int,
         help='number of gmm\'s component',
     )
     parser.add_argument(
+        '-gmm_dim',
+        '--gmm_dim',
+        default=2048,
+        type=float,
+        help='GMM feature dimension',
+    )
+    parser.add_argument(
         '-gmm_e',
         '--gmm_epoch',
-        default=100,
+        default=1,
         type=int,
         help='number of total epochs to fit a GMM',
     )
@@ -225,6 +231,7 @@ def init():
         type=float,
         help='GMM learning rate',
     )
+
     parser.add_argument(
         '-gmm_b',
         '--gmm_batch_size',
@@ -245,7 +252,7 @@ def init():
     parser.add_argument(
         '-kmi',
         '--k_means_iters',
-        default=10,
+        default=1,
         type=int,
         help='Iterations of k-means initialization of gmm\'s parameters',
     )
@@ -259,9 +266,9 @@ def init():
     parser.add_argument(
         '-gmm_lr_step',
         '--gmm_lr_step',
-        default=5,
+        default=30,
         type=int,
-        help='gmm fitting learning rate scheduler',
+        help='gmm fitting learning rate scheduler (default=5)',
     )
     parser.add_argument(
         '-gmm_lr_gamma',
@@ -275,7 +282,7 @@ def init():
     ### DDP arguments #########
     parser.add_argument('-n', '--nodes', default=1, type=int, metavar='N')
     parser.add_argument(
-        '-g', '--gpus', default=4, type=int, help='number of gpus per node'
+        '-g', '--gpus', default=2, type=int, help='number of gpus per node'
     )
     parser.add_argument(
         '-nr', '--nr', default=0, type=int, help='ranking within the nodes'
@@ -285,7 +292,7 @@ def init():
     args = parser.parse_args()
     # configuration for main init multiprocessing
     args.world_size = args.gpus * args.nodes
-    os.environ['CUDA_VISIBLE_DEVICES'] = '1,2,3,7'
+    os.environ['CUDA_VISIBLE_DEVICES'] = '5,7'
     os.environ['MASTER_ADDR'] = 'localhost'
     os.environ['MASTER_PORT'] = '23357'
     # 调用main函数，传入参数(rank,args)
