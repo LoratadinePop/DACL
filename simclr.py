@@ -14,7 +14,6 @@ from tqdm import tqdm
 from util import reduce_tensor, save_checkpoint, get_time, get_writer
 from model.sgd_gmm import SGDGMM, SGDGMMModule
 import torch.multiprocessing
-# torch.multiprocessing.set_sharing_strategy('file_system')
 import torch.distributed as dist
 import torch.multiprocessing as mp
 
@@ -138,10 +137,7 @@ class SimCLR(object):
             gmm.load_state_dict(torch.load("./result/checkpoint/sgdgmm/gmm.pth"))
             gmm.eval()
             gmm.init_mvn()
-            # gmm.to(self.args.device) #TAG:
             self.model.train()
-            # backbone = self.model.module.backbone
-            # mlp = self.model.module.mlp
 
             with tqdm(total=(len(train_loader.dataset) // train_loader.batch_size // dist.get_world_size()), ncols=None, unit='it') as _tqdm:
                 _tqdm.set_description(f'SimCLR training @{dist.get_rank()} epoch {epoch_counter+1}/{self.args.epochs}')
@@ -163,11 +159,11 @@ class SimCLR(object):
                         # features = self.model(images) # TAG: modified
                         # TAG:256,1,128
                         # DONE: Augmentation twice!
-                        # time1 = time.time()
+                        time1 = time.time()
                         with torch.no_grad():
                             sampled_features = gmm.sample(features.to(torch.device("cpu")), sample_num=2)
-                        # time2 = time.time()
-                        # print(f'@rank{dist.get_rank()} spend {time2-time1}s to sample features.')
+                        time2 = time.time()
+                        print(f'@rank{dist.get_rank()} spend {time2-time1}s to sample features.')
                         sampled_features = sampled_features.to(self.args.device)
                         # print(sampled_features.shape)
                         # sampled_features = torch.squeeze(sampled_features, 1)
@@ -194,17 +190,6 @@ class SimCLR(object):
                     loss_reduced = reduce_tensor(loss)
                     if dist.get_rank() == 0:
                         self.writer.add_scalar(tag="SimCLR Training Loss", scalar_value=loss_reduced.item(), global_step=n_iter+1)
-
-                    # if n_iter % self.args.log_every_n_steps == 0:
-                    #     top1, top5 = accuracy(logits, labels, topk=(1, 5))
-                    #     self.writer.add_scalar('loss', loss, global_step=n_iter)
-                    #     self.writer.add_scalar('acc/top1', top1[0], global_step=n_iter)
-                    #     self.writer.add_scalar('acc/top5', top5[0], global_step=n_iter)
-                    #     self.writer.add_scalar(
-                    #         'learning_rate',
-                    #         self.scheduler.get_lr()[0],
-                    #         global_step=n_iter,
-                    #     )
 
                     n_iter += 1
 

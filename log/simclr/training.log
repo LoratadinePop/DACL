@@ -774,3 +774,15 @@ DEBUG:root:@rank1 Epoch: 59	<2021-11-26 23:43:13> loss: 0.0007339001167565584
 DEBUG:root:@rank0 Epoch: 59	<2021-11-26 23:43:13> loss: 0.0007554407347925007
 DEBUG:root:@rank1 Epoch: 60	<2021-11-26 23:45:22> loss: 0.0006829404155723751
 DEBUG:root:@rank0 Epoch: 60	<2021-11-26 23:45:22> loss: 0.0007148332661017776
+INFO:root:@rank0 Start SimCLR training for 100 epochs. <2021-11-27 14:30:30>
+INFO:root:@rank0 Start SimCLR training for 100 epochs. <2021-11-27 14:32:05>
+INFO:root:@rank0 Start SimCLR training for 100 epochs. <2021-11-27 14:34:33>
+INFO:root:@rank0 Start SimCLR training for 100 epochs. <2021-11-27 14:36:58>
+INFO:root:@rank0 Start SimCLR training for 100 epochs. <2021-11-27 14:40:04>
+INFO:root:@rank0 Start SimCLR training for 100 epochs. <2021-11-27 14:43:36>
+DEBUG:root:@rank1 Epoch: 1	<2021-11-27 14:47:08> loss: 0.0015802006237208843
+DEBUG:root:@rank0 Epoch: 1	<2021-11-27 14:47:08> loss: 0.001794364769011736
+INFO:root:@rank0 Start SimCLR training for 100 epochs. <2021-11-27 14:49:10>
+INFO:root:@rank0 Start SimCLR training for 100 epochs. <2021-11-27 14:51:11>
+INFO:root:@rank0 Start SimCLR training for 100 epochs. <2021-11-27 14:54:27>
+INFO:root:@rank0 Start SimCLR training for 100 epochs. <2021-11-27 17:28:48>
