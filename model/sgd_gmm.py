@@ -9,7 +9,6 @@ import numpy as np
 from tqdm import tqdm
 import time
 from model.cluster import minibatch_k_means
-from deprecated import deprecated
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from util import save_plot, reduce_tensor, get_writer
@@ -98,27 +97,38 @@ class SGDGMMModule(nn.Module):
     #         )
     #     return torch.Tensor(sample_list)
 
+
+    def init_mvn(self):
+        time1 = time.time()
+        self.multivar_normal = [mvn(loc=self.means[idx], scale_tril=self.L[idx]) for idx in range(self.k)]
+        time2 = time.time()
+        # print(f'init mvn using {time2-time1} seconds')
     '''
     Return [ [ [feature1],[feature2] ],[ [],[] ],[ [],[] ]... ]
     '''
     def sample(self, input, sample_num=1):
         # input = input.to(self.device)
         component = self.predict(input)
-        multivar_normal = [mvn(loc=self.means[idx], scale_tril=self.L[idx]) for idx in range(self.k)]
+        # multivar_normal = [mvn(loc=self.means[idx], scale_tril=self.L[idx]) for idx in range(self.k)]
         sample_list = []
         # FIXME: Wondering if there is a batch sample way to improve performance.
+        # time1 = time.time()
         for idx in range(len(component)):
-            sample_list.append(
-                [
-                    multivar_normal[component[idx]]
-                    .rsample()
-                    .detach()
-                    .numpy()
-                    .tolist()
-                    for t in range(sample_num)
-                ]
-            )
-        return torch.Tensor(sample_list)
+            sample_list.append(torch.cat([ self.multivar_normal[component[idx]].rsample().unsqueeze(0) for _ in range(sample_num) ],dim=0).unsqueeze(0))
+        # for idx in range(len(component)):
+        #     sample_list.append(
+        #         [
+        #             self.multivar_normal[component[idx]]
+        #             .rsample()
+        #             .detach()
+        #             .numpy()
+        #             .tolist()
+        #             for t in range(sample_num)
+        #         ]
+        #     )
+        # time2 = time.time()
+        # print(f'sample {time2-time1}')
+        return torch.Tensor(torch.cat(sample_list,dim=0))
 
 class SGDGMM(ABC):
     """ABC for fitting a PyTorch nn-based GMM."""
@@ -165,6 +175,7 @@ class SGDGMM(ABC):
 
         # TAG: 这里需要获取backbone encoder
         self.backbone_model = self.backbone_model.backbone.to(self.device)
+        self.backbone_model.eval()
 
         # DONE: Move to fit
         # self.module = self.module.to(device)

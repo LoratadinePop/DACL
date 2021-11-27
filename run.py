@@ -220,7 +220,7 @@ def init():
     parser.add_argument(
         '-gmm_e',
         '--gmm_epoch',
-        default=1,
+        default=100,
         type=int,
         help='number of total epochs to fit a GMM',
     )
@@ -252,7 +252,7 @@ def init():
     parser.add_argument(
         '-kmi',
         '--k_means_iters',
-        default=1,
+        default=50,
         type=int,
         help='Iterations of k-means initialization of gmm\'s parameters',
     )
@@ -292,9 +292,9 @@ def init():
     args = parser.parse_args()
     # configuration for main init multiprocessing
     args.world_size = args.gpus * args.nodes
-    os.environ['CUDA_VISIBLE_DEVICES'] = '5,7'
+    os.environ['CUDA_VISIBLE_DEVICES'] = '0,7'
     os.environ['MASTER_ADDR'] = 'localhost'
-    os.environ['MASTER_PORT'] = '23357'
+    os.environ['MASTER_PORT'] = '21357'
     # 调用main函数，传入参数(rank,args)
     mp.spawn(main, nprocs=args.gpus, args=(args,))
 

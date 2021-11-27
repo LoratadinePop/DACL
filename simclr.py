@@ -126,8 +126,8 @@ class SimCLR(object):
             if epoch_counter % self.args.gmm_every_n_epoch == 0:
                 if dist.get_rank() == 0:
                     os.environ['MASTER_ADDR'] = 'localhost'
-                    os.environ['MASTER_PORT'] = '34351'
-                    os.environ['CUDA_VISIBLE_DEVICES'] = '5,0'
+                    os.environ['MASTER_PORT'] = '34151'
+                    # os.environ['CUDA_VISIBLE_DEVICES'] = '5,0,1'
                     # self.model.eval() # TAG: 
                     mp.spawn(fit_gmm, nprocs=self.args.gpus, args=(self.args, self.model.module, gmm_dataset))
                     # self.model.train() # TAG: 
@@ -136,8 +136,10 @@ class SimCLR(object):
                     dist.barrier()
 
             gmm.load_state_dict(torch.load("./result/checkpoint/sgdgmm/gmm.pth"))
+            gmm.eval()
+            gmm.init_mvn()
             # gmm.to(self.args.device) #TAG:
-
+            self.model.train()
             # backbone = self.model.module.backbone
             # mlp = self.model.module.mlp
 
@@ -149,7 +151,7 @@ class SimCLR(object):
                     # print(images)
                     # 在此做mixup
                     # tmp_img = images
-                    # TAG: 这里images的形式是什么？
+                    # TAG: 这里images的形式是什么？[ [],[] ]
                     images = torch.cat(images, dim=0)
                     images = images.to(self.args.device)
 
@@ -157,23 +159,30 @@ class SimCLR(object):
                         # features = self.model(images)
                         # 256, 128
                         features = torch.flatten(self.model.module.backbone(images), start_dim=1) # TAG: intermediate layer feature
+                        # print(features.shape)
                         # features = self.model(images) # TAG: modified
                         # TAG:256,1,128
                         # DONE: Augmentation twice!
-                        time1 = time.time()
-                        sampled_features = gmm.sample(features.to(torch.device("cpu")), sample_num=2)
-                        time2 = time.time()
-                        print(f'@rank{dist.get_rank()} spend {time2-time1}s to sample features.')
+                        # time1 = time.time()
+                        with torch.no_grad():
+                            sampled_features = gmm.sample(features.to(torch.device("cpu")), sample_num=2)
+                        # time2 = time.time()
+                        # print(f'@rank{dist.get_rank()} spend {time2-time1}s to sample features.')
                         sampled_features = sampled_features.to(self.args.device)
+                        # print(sampled_features.shape)
                         # sampled_features = torch.squeeze(sampled_features, 1)
                         mixup_coefficient = torch.distributions.uniform.Uniform(0.9, 1.0).sample()
                         mixup_aug1 = mixup_coefficient * features + (1 - mixup_coefficient) * sampled_features[:,0,:]
                         mixup_aug2 = mixup_coefficient * features + (1 - mixup_coefficient) * sampled_features[:,1,:]
                         feat1 = self.model.module.mlp(mixup_aug1)
                         feat2 = self.model.module.mlp(mixup_aug2)
+                        # print(feat1.shape)
+                        # print(feat2.shape)
                         features = torch.cat((feat1, feat2), dim=0)
+                        # print(features.shape)
                         logits, labels = self.info_nce_loss(features)
                         loss = self.criterion(logits, labels)
+
                     self.optimizer.zero_grad()
                     scaler.scale(loss).backward()
                     scaler.step(self.optimizer)
