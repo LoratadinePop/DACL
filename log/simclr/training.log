@@ -58,3 +58,6 @@ DEBUG:root:@rank0 Epoch: 2	<2021-11-28 10:44:46> loss: 8.101330757141113
 DEBUG:root:@rank0 Epoch: 3	<2021-11-28 10:46:43> loss: 8.037287712097168
 DEBUG:root:@rank0 Epoch: 4	<2021-11-28 10:49:34> loss: 8.750277519226074
 DEBUG:root:@rank0 Epoch: 5	<2021-11-28 10:51:30> loss: 8.423189163208008
+INFO:root:@rank0 Start SimCLR training for 100 epochs. <2021-11-28 11:38:52>
+INFO:root:@rank0 Start SimCLR training for 100 epochs. <2021-11-28 11:41:26>
+INFO:root:@rank0 Start SimCLR training for 100 epochs. <2021-11-28 11:43:38>

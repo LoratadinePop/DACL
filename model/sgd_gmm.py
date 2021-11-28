@@ -196,7 +196,7 @@ class SGDGMM(ABC):
             # TAG: Wrap it with DDP
             self.module = nn.parallel.DistributedDataParallel(self.module, device_ids=[local_rank])
             self.optimiser = torch.optim.Adam(params=self.module.parameters(), lr=self.lr)
-            self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimiser, T_max=90, eta_min= 1e-7, last_epoch=-1, verbose=True)
+            self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimiser, T_max=90, eta_min= 1e-6, last_epoch=-1, verbose=True)
             # self.scheduler = torch.optim.lr_scheduler.MultiStepLR(
             #     self.optimiser,
             #     milestones=[self.lr_step, self.lr_step + 30, self.lr_step + 50, self.lr_step + 60],

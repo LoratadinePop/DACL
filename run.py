@@ -85,7 +85,7 @@ def init():
     # parser.add_argument('--lr','--learning-rate', default=0.0003, type=float, metavar='LR', help='initial learning rate', dest='lr', )
     parser.add_argument('--wd', '--weight-decay', default=1e-6, type=float, metavar='W', help='weight decay (default: 1e-4)', dest='weight_decay',)
     parser.add_argument('--warm_up_epoch', default=10, type=int, help='epochs for warm up')
-    parser.add_argument('--eta_min', default=1e-6, type=float, help='CosineAnnealingLR min lr')
+    parser.add_argument('--eta_min', default=1e-3, type=float, help='CosineAnnealingLR min lr')
     parser.add_argument('--seed', default=12345, type=int, help='seed for initializing training. ')
     # parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
     parser.add_argument('--fp16-precision', action='store_true', help='Whether or not to use 16-bit precision GPU training.',)
