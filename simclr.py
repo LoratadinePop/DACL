@@ -1,3 +1,4 @@
+from re import S
 import time
 from functools import wraps
 import logging
@@ -8,15 +9,13 @@ import torch
 from torch._C import device
 import torch.nn.functional as F
 from torch.cuda.amp import GradScaler, autocast
-from torch.utils.tensorboard import SummaryWriter
-from torch.utils.tensorboard.summary import image
 from tqdm import tqdm
 from util import reduce_tensor, save_checkpoint, get_time, get_writer
 from model.sgd_gmm import SGDGMM, SGDGMMModule
 import torch.multiprocessing
-# torch.multiprocessing.set_sharing_strategy('file_system')
 import torch.distributed as dist
 import torch.multiprocessing as mp
+
 
 def fit_gmm(local_rank, args, model, dataset):
     device = torch.device("cuda", local_rank)
@@ -32,8 +31,8 @@ def fit_gmm(local_rank, args, model, dataset):
         max_no_improvement=20,
         k_means_factor=args.k_means_factor,
         k_means_iters=args.k_means_iters,
-        lr_step=args.gmm_lr_step,
-        lr_gamma=args.gmm_lr_gamma,
+        # lr_step=args.gmm_lr_step,
+        # lr_gamma=args.gmm_lr_gamma,
         device=device,
         backbone_model=model,
         args=args,
@@ -120,28 +119,36 @@ class SimCLR(object):
 
             train_loader.sampler.set_epoch(epoch_counter)
 
+            torch.cuda.empty_cache()
+
             # FIXME: Do not put gmm on GPU, it will cause error which some tensor on cpu while others on GPU.
             gmm = SGDGMMModule(self.args.components, self.args.gmm_dim, self.args.weight_decay)
-
+            # TAG: GPU Ver.
+            # gmm = SGDGMMModule(self.args.components, self.args.gmm_dim, self.args.weight_decay, device=self.args.device)
             if epoch_counter % self.args.gmm_every_n_epoch == 0:
                 if dist.get_rank() == 0:
                     os.environ['MASTER_ADDR'] = 'localhost'
                     os.environ['MASTER_PORT'] = '34151'
+                    os.environ['CUDA_VISIBLE_DEVICES'] = '1,2,0'
                     # os.environ['CUDA_VISIBLE_DEVICES'] = '5,0,1'
                     # self.model.eval() # TAG: 
                     mp.spawn(fit_gmm, nprocs=self.args.gpus, args=(self.args, self.model.module, gmm_dataset))
-                    # self.model.train() # TAG: 
                     dist.barrier()
                 else:
                     dist.barrier()
 
-            gmm.load_state_dict(torch.load("./result/checkpoint/sgdgmm/gmm.pth"))
+            # GMM init decay
+            if epoch_counter == 50 or epoch_counter == 100:
+                self.args.gmm_every_n_epoch = self.args.gmm_every_n_epoch + 10
+
+            gmm.load_state_dict(torch.load("./result/checkpoint/sgdgmm/gmm.pth")) # TAG: GPU Ver.
+            # gmm.to(self.args.device)
             gmm.eval()
             gmm.init_mvn()
-            # gmm.to(self.args.device) #TAG:
+
+            torch.cuda.empty_cache()
+            
             self.model.train()
-            # backbone = self.model.module.backbone
-            # mlp = self.model.module.mlp
 
             with tqdm(total=(len(train_loader.dataset) // train_loader.batch_size // dist.get_world_size()), ncols=None, unit='it') as _tqdm:
                 _tqdm.set_description(f'SimCLR training @{dist.get_rank()} epoch {epoch_counter+1}/{self.args.epochs}')
@@ -167,19 +174,14 @@ class SimCLR(object):
                         with torch.no_grad():
                             sampled_features = gmm.sample(features.to(torch.device("cpu")), sample_num=2)
                         # time2 = time.time()
-                        # print(f'@rank{dist.get_rank()} spend {time2-time1}s to sample features.')
+                        # print(f'@rank{dist.get_rank()} spend {time2-time1}s to sample features. shape{sampled_features.shape}')
                         sampled_features = sampled_features.to(self.args.device)
-                        # print(sampled_features.shape)
-                        # sampled_features = torch.squeeze(sampled_features, 1)
                         mixup_coefficient = torch.distributions.uniform.Uniform(0.9, 1.0).sample()
                         mixup_aug1 = mixup_coefficient * features + (1 - mixup_coefficient) * sampled_features[:,0,:]
                         mixup_aug2 = mixup_coefficient * features + (1 - mixup_coefficient) * sampled_features[:,1,:]
                         feat1 = self.model.module.mlp(mixup_aug1)
                         feat2 = self.model.module.mlp(mixup_aug2)
-                        # print(feat1.shape)
-                        # print(feat2.shape)
                         features = torch.cat((feat1, feat2), dim=0)
-                        # print(features.shape)
                         logits, labels = self.info_nce_loss(features)
                         loss = self.criterion(logits, labels)
 
@@ -195,24 +197,13 @@ class SimCLR(object):
                     if dist.get_rank() == 0:
                         self.writer.add_scalar(tag="SimCLR Training Loss", scalar_value=loss_reduced.item(), global_step=n_iter+1)
 
-                    # if n_iter % self.args.log_every_n_steps == 0:
-                    #     top1, top5 = accuracy(logits, labels, topk=(1, 5))
-                    #     self.writer.add_scalar('loss', loss, global_step=n_iter)
-                    #     self.writer.add_scalar('acc/top1', top1[0], global_step=n_iter)
-                    #     self.writer.add_scalar('acc/top5', top5[0], global_step=n_iter)
-                    #     self.writer.add_scalar(
-                    #         'learning_rate',
-                    #         self.scheduler.get_lr()[0],
-                    #         global_step=n_iter,
-                    #     )
-
                     n_iter += 1
 
-                # warmup for the first 10 epochs
-                if epoch_counter >= 10:
-                    self.scheduler.step()
+            # warmup for the first 10 epochs
+            if epoch_counter >= self.args.warm_up_epoch-1:
+                self.scheduler.step()
 
-                logging.debug(f"@rank{dist.get_rank()} Epoch: {epoch_counter+1}\t<{get_time()}> loss: {loss.item()}")
+            logging.debug(f"@rank{dist.get_rank()} Epoch: {epoch_counter+1}\t<{get_time()}> loss: {loss.item()}")
 
         if dist.get_rank() == 0:
             logging.info("@rank{} Training has finished. <{}>".format(dist.get_rank(), get_time()))
