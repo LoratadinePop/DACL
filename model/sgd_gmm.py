@@ -1,6 +1,7 @@
 from abc import ABC
 import copy
 import torch
+from torch.autograd.grad_mode import F
 import torch.utils
 from torch._C import device
 import torch.nn as nn
@@ -88,7 +89,7 @@ class SGDGMMModule(nn.Module):
         sample_list = []
         for idx in range(len(component)):
             sample_list.append(torch.cat([ self.multivar_normal[component[idx]].rsample().unsqueeze(0) for _ in range(sample_num) ],dim=0).unsqueeze(0))
-        return torch.Tensor(torch.cat(sample_list,dim=0))
+        return torch.Tensor(torch.cat(sample_list, dim=0))
 
 class SGDGMM(ABC):
     """ABC for fitting a PyTorch nn-based GMM."""
@@ -106,8 +107,8 @@ class SGDGMM(ABC):
         max_no_improvement=20,
         k_means_factor=1,
         k_means_iters=2,
-        lr_step=5,
-        lr_gamma=0.1,
+        # lr_step=5,
+        # lr_gamma=0.1,
         device=None,
         backbone_model=None,
         args=None,
@@ -120,8 +121,8 @@ class SGDGMM(ABC):
         self.tol = tol
         self.lr = lr
         self.w = w
-        self.lr_step = lr_step
-        self.lr_gamma = lr_gamma
+        # self.lr_step = lr_step
+        # self.lr_gamma = lr_gamma
         self.restarts = restarts
         self.k_means_factor = k_means_factor
         self.k_means_iters = k_means_iters
@@ -153,7 +154,6 @@ class SGDGMM(ABC):
             world_size=self.args.world_size,
             rank=rank,
         )
-
         self.writer = get_writer('./log/sgdgmm/') if dist.get_rank() == 0 else None
 
         init_loader = torch.utils.data.DataLoader(
@@ -196,11 +196,12 @@ class SGDGMM(ABC):
             # TAG: Wrap it with DDP
             self.module = nn.parallel.DistributedDataParallel(self.module, device_ids=[local_rank])
             self.optimiser = torch.optim.Adam(params=self.module.parameters(), lr=self.lr)
-            self.scheduler = torch.optim.lr_scheduler.MultiStepLR(
-                self.optimiser,
-                milestones=[self.lr_step, self.lr_step + 20, self.lr_step + 50],
-                gamma=self.lr_gamma,
-            ) # TAG: change here!
+            self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimiser, T_max=90, eta_min= 1e-7, last_epoch=-1, verbose=True)
+            # self.scheduler = torch.optim.lr_scheduler.MultiStepLR(
+            #     self.optimiser,
+            #     milestones=[self.lr_step, self.lr_step + 30, self.lr_step + 50, self.lr_step + 60],
+            #     gamma=self.lr_gamma,
+            # ) # TAG: change here!
 
             # DONE: Reduce all process's data
             train_loss_curve = []
@@ -245,6 +246,9 @@ class SGDGMM(ABC):
                         _tqdm.set_postfix(loss=f'{loss.item():.4f}')
                         _tqdm.update()
 
+                if epoch >= 9:
+                    self.scheduler.step()
+
                 # DONE: reduce train loss curve
                 # print(f"rank {dist.get_rank()} train_loss before reduce: {train_loss}")
                 train_loss = reduce_tensor(torch.Tensor([train_loss]).to(self.device)).item()
@@ -259,7 +263,6 @@ class SGDGMM(ABC):
                     ).item()
                     val_loss_curve.append(val_loss)
 
-                self.scheduler.step()
 
                 # DONE: Since train & val loss have all been reduces, only rank_0 print infomation.
                 if dist.get_rank() == 0:
