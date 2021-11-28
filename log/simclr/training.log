@@ -279,3 +279,4 @@ INFO:root:@rank0 Start SimCLR training for 100 epochs. <2021-11-28 11:38:52>
 INFO:root:@rank0 Start SimCLR training for 100 epochs. <2021-11-28 11:41:26>
 INFO:root:@rank0 Start SimCLR training for 100 epochs. <2021-11-28 11:43:38>
 >>>>>>> 2e5203175cc706591d61810d73041a0524383483
+INFO:root:@rank0 Start SimCLR training for 100 epochs. <2021-11-28 13:49:12>
