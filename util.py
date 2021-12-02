@@ -75,3 +75,4 @@ def reduce_tensor(tensor: torch.Tensor) -> torch.Tensor:
     dist.all_reduce(rt, op=dist.ReduceOp.SUM)
     rt = rt / dist.get_world_size()
     return rt
+
