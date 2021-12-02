@@ -120,7 +120,7 @@ def init():
     os.environ['CUDA_VISIBLE_DEVICES'] = '1,2,0'
     os.environ['MASTER_ADDR'] = 'localhost'
     os.environ['MASTER_PORT'] = '21357'
-
+    # mp.spawn(main, nprocs=args.gpus, args=(args,))
     mp.spawn(main, nprocs=1, args=(args,))
 
 if __name__ == "__main__":
