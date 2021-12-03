@@ -76,9 +76,12 @@ def reduce_tensor(tensor: torch.Tensor) -> torch.Tensor:
     rt = rt / dist.get_world_size()
     return rt
 
+<<<<<<< HEAD
+=======
 def linear_warmup(optimizer, lr_min, lr_max, epoch_warmup_totol, epoch_cur):
     div = (lr_max - lr_min) / epoch_warmup_totol
     lr = lr_min + div * epoch_cur
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
     print(f'Warmup learning rate to {lr}')
+>>>>>>> c150bf1b7e123dc38182cfc4fd9af901c43eb33d
