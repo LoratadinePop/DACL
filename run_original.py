@@ -46,6 +46,7 @@ def main(local_rank, args):
     )
 
     model = ResNetSimCLR(base_model=args.arch, out_dim=args.out_dim)
+    # print(model)
     # SyncBN
     model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model).to(device)
     model = DDP(model, device_ids=[local_rank])
@@ -64,13 +65,13 @@ def init():
     parser.add_argument('--data', metavar='DIR', default='./dataset', help='path to dataset')
     parser.add_argument('--dataset-name', default='cifar10', help='dataset name', choices=['stl10', 'cifar10'],)
     parser.add_argument('--arch', metavar='ARCH', default='resnet50', choices=model_names, help='model architecture: ' + ' | '.join(model_names) + ' (default: resnet50)',)
-    parser.add_argument('--workers', default=32, type=int, metavar='N', help='number of data loading workers (default: 32)',)
+    parser.add_argument('--workers', default=0, type=int, metavar='N', help='number of data loading workers (default: 32)',)
     parser.add_argument('--epochs', default=100, type=int, metavar='N', help='number of total epochs to run',)
-    parser.add_argument('--batch_size', default=512, type=int, metavar='N', help='mini-batch size (default: 256)',)
+    parser.add_argument('--batch_size', default=256, type=int, metavar='N', help='mini-batch size (default: 256)',)
     # parser.add_argument('--lr','--learning-rate', default=0.0003, type=float, metavar='LR', help='initial learning rate', dest='lr', )
     parser.add_argument('--wd', '--weight-decay', default=1e-6, type=float, metavar='W', help='weight decay (default: 1e-4)', dest='weight_decay',)
     parser.add_argument('--warm_up_epoch', default=10, type=int, help='epochs for warm up')
-    parser.add_argument('--eta_min', default=1e-10, type=float, help='CosineAnnealingLR min lr')
+    parser.add_argument('--eta_min', default=0.001, type=float, help='CosineAnnealingLR min lr')
     parser.add_argument('--seed', default=12345, type=int, help='seed for initializing training. ')
     # parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
     parser.add_argument('--fp16-precision', action='store_true', help='Whether or not to use 16-bit precision GPU training.',)
@@ -81,7 +82,7 @@ def init():
 
     #TAG: DDP args
     parser.add_argument('--nodes', default=1, type=int, metavar='N', help='number of machines/nodes')
-    parser.add_argument('--gpus', default=2, type=int, help='number of gpus per node')
+    parser.add_argument('--gpus', default=4, type=int, help='number of gpus per node')
     parser.add_argument('--nr', default=0, type=int, help='node id')
 
     args = parser.parse_args()
@@ -90,9 +91,9 @@ def init():
     # args.lr = 0.3 * args.batch_size * args.world_size/256
     args.lr = 1.0
 
-    os.environ['CUDA_VISIBLE_DEVICES'] = '2,3'
+    os.environ['CUDA_VISIBLE_DEVICES'] = '1,2,3,0'
     os.environ['MASTER_ADDR'] = 'localhost'
-    os.environ['MASTER_PORT'] = '21657'
+    os.environ['MASTER_PORT'] = '21732'
 
     mp.spawn(main, nprocs=args.gpus, args=(args,))
 

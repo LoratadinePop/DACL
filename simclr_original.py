@@ -90,10 +90,12 @@ class SimCLR_origin(object):
 
                 for images, _ in train_loader:
                     images = torch.cat(images, dim=0)
+                    # print(f'images {images.shape}')
                     images = images.to(self.args.device)
 
                     with autocast(enabled=self.args.fp16_precision):
                         features = self.model(images)
+                        # print(f'features {features.shape}')
                         logits, labels = self.info_nce_loss(features)
                         loss = self.criterion(logits, labels)
 

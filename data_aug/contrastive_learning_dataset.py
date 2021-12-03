@@ -11,13 +11,13 @@ class ContrastiveLearningDataset:
         self.root_folder = root_folder
 
     @staticmethod
-    def get_simclr_pipeline_transform(size, s=1):
+    def get_simclr_pipeline_transform(size, s=0.5):
         """Return a set of data augmentation transformations as described in the SimCLR paper."""
         color_jitter = transforms.ColorJitter(0.8 * s, 0.8 * s, 0.8 * s,
                                               0.2 * s)
         data_transforms = transforms.Compose([
             transforms.RandomResizedCrop(size=size),
-            transforms.RandomHorizontalFlip(),
+            transforms.RandomHorizontalFlip(p=0.5),
             transforms.RandomApply([color_jitter], p=0.8),
             transforms.RandomGrayscale(p=0.2),
             # GaussianBlur(kernel_size=int(0.1 * size)),
@@ -28,8 +28,6 @@ class ContrastiveLearningDataset:
     @staticmethod
     def get_simclr_pipeline_without_transform():
         return transforms.Compose([transforms.ToTensor()])
-
-
 
     def get_gmm_init_dataset(self, name):
         valid_datasets = {
